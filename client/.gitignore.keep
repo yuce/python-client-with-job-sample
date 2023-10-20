@@ -1,0 +1,7 @@
+.idea
+venv
+
+hzconfig/config.json
+hzconfig/ca.pem
+hzconfig/cert.pem
+hzconfig/key.pem

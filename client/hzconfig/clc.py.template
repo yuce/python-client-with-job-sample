@@ -1,0 +1,104 @@
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+from hazelcast.config import Config
+import yaml
+from yaml import SafeLoader
+
+__all__ = "load_config",
+
+DEFAULT_CONFIG_NAME = '''{{ or .config "default" }}'''
+
+_current_dir = Path(os.path.dirname(__file__))
+
+
+def load_config(name="") -> Config:
+    config_name_or_path = name or os.getenv("CLC_CONFIG")
+    if not config_name_or_path:
+        local_config = _current_dir / "config.json"
+        if local_config.exists():
+            config_name_or_path = str(local_config)
+        else:
+            local_config = _current_dir / "config.yaml"
+            if local_config.exists():
+                config_name_or_path = str(local_config)
+            else:
+                config_name_or_path = DEFAULT_CONFIG_NAME
+    if config_name_or_path.endswith(".json") or config_name_or_path.endswith(".yaml"):
+        config_path = Path(config_name_or_path)
+    else:
+        config_path = Path("configs", config_name_or_path, "config.json")
+    config_path = home() / config_path
+    if not config_path.exists():
+        if config_path.suffix == ".json":
+            # could not find the json config, try again with the yaml config
+            config_path = config_path.with_suffix(".yaml")
+            if not config_path.exists():
+                raise FileNotFoundError(config_path)
+        else:
+            raise FileNotFoundError(config_path)
+    return load_config_from_path(config_path)
+
+
+def home() -> Path:
+    home = os.getenv("CLC_HOME")
+    if not home:
+        from pathlib import Path
+        if sys.platform == "win32":
+            hz_home = "AppData/Roaming/Hazelcast"
+        else:
+            hz_home = ".hazelcast"
+        return Path.home() / hz_home
+    return Path(home)
+
+
+def load_config_from_path(path: Path) -> Config:
+    with open(path, "r") as f:
+        ext = path.suffix
+        if ext == ".json":
+            clc_config = json.loads(f.read())
+        elif ext == ".yaml":
+            clc_config = yaml.load(f.read(), SafeLoader)
+        else:
+            raise RuntimeError(f"Unknown configuration file extension: {ext}")
+    config_dir = path.parent
+    clc_to_py = {
+        "cluster.name": lambda v: ("cluster_name", v),
+        "cluster.discovery-token": lambda v: ("cloud_discovery_token", v),
+        "cluster.address": lambda v: ("cluster_members", [v]),
+        "cluster.user": lambda v: ("creds_username", v),
+        "cluster.password": lambda v: ("creds_password", v),
+        "ssl.ca-path": lambda v: ("ssl_cafile", str(config_dir / v)),
+        "ssl.cert-path": lambda v: ("ssl_certfile", str(config_dir / v)),
+        "ssl.key-path": lambda v: ("ssl_keyfile", str(config_dir / v)),
+        "ssl.key-password": lambda v: ("ssl_password", v),
+        "ssl.skip-verify": lambda v: ("ssl_check_hostname", not v)
+    }
+    config_dict = {}
+    for key, fun in clc_to_py.items():
+        value = _get_config_value(clc_config, key)
+        if value is None:
+            continue
+        config_key, value = fun(value)
+        config_dict[config_key] = value
+    config = Config.from_dict(config_dict)
+    if config.ssl_certfile:
+        config.ssl_enabled = True
+    config.statistics_enabled = True
+    api_base = _get_config_value(clc_config, "cluster.api-base")
+    if api_base:
+        from hazelcast.discovery import HazelcastCloudDiscovery
+        HazelcastCloudDiscovery._CLOUD_URL_BASE = api_base.lstrip("https://")
+    return config
+
+
+def _get_config_value(config: dict, key: str) -> Any:
+    for p in key.split("."):
+        config = config.get(p)
+        if config is None:
+            return None
+    return config
+

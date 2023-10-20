@@ -1,0 +1,36 @@
+# Hazelcast Python Client Project Starter
+
+This project contains the minimal code to connect a Hazelcast Python Client to a Hazelcast cluster using a Hazelcast CLC configuration.
+
+## Usage
+
+1. Create a virtual environment:
+   ```
+   python3 -m venv venv
+   ```
+2. Activate the virtual environment (Linux/MacOS)
+   ```
+   source venv/bin/activate
+   ```
+3. Activate the virtual environment (Windows)
+   ```
+   .\venv/Scripts/activate
+   ```
+4. Install the requirements
+   ```
+   pip install -r requirements
+   ```
+5. Run the code with the default cluster configuration:
+   ```
+   python3 main.py
+   ```
+6. Run the code with another cluster configuration (Linux/MacOS):
+   ```
+   export CLC_CONFIG=OTHER-CONFIG
+   python3 main.py
+   ```
+7. Run the code with another cluster configuration (Windows):
+   ```
+   set CLC_CONFIG=OTHER-CONFIG
+   python3 main.py
+   ```
